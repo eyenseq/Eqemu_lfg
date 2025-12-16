@@ -1,5 +1,5 @@
 # Eqemu_lfg
-LFG tool that allows lfg and lfm. once invited and accepted player is ported to group
+LFG tool that allows lfg and lfm. once invited and accepted player is ported to group...kinda betaish
 
 # EQEmu LFG / LFM Plugin (Perl)
 
