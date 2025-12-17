@@ -87,6 +87,49 @@ When a player accepts a group invite:
 - Zone blacklist support
 - Pending expiration window
 
+### Pending Invite Notifications (Invite Incoming)
+
+When a group leader clicks [Invite] in the LFG list, the plugin now:
+
+Creates a pending invite snapshot (name-based bucket)
+
+Sends the invitee a cross-zone inbox message like:
+
+“Invite incoming from <leader>… accept to auto-port… ?lfg cancel to decline.”
+
+### This helps the invitee understand what’s about to happen before they accept the /invite.
+
+Invitee Cancel Pending Invite
+
+If you don’t want to accept the incoming invite (or you got spammed), you can cancel your own pending invite:
+```
+?lfg cancel
+```
+
+This clears your pending snapshot so no auto-port occurs even if you accept an invite afterward. 
+
+pasted
+
+### Leader Verification Hard Lock (Anti-Wrong-Invite Port)
+
+A rare edge case is “pending invite was from Leader A, but you accepted an invite from Leader B.”
+
+To prevent wrong-porting, the plugin now hard-locks auto-porting:
+
+It checks your current group leader name
+
+It must match the leader stored in the pending snapshot
+
+If it doesn’t match:
+
+auto-port is canceled
+
+pending snapshot is cleared
+
+you get a message explaining why
+
+### This makes auto-port behavior deterministic and grief-resistant. 
+
 ---
 
 ## Installation
@@ -129,11 +172,11 @@ sub EVENT_TIMER {
 
 ⚠️ If these events already exist, merge the logic rather than overwriting.
 
-Usage
+## Usage
 All commands are issued via /say.
 
-LFG Commands
-Post LFG
+## LFG Commands
+### Post LFG
 ```
 ?lfg <min>-<max> [role|auto] <note>
 ```
@@ -144,15 +187,15 @@ Examples:
 ?lfg 40-50 healer ready to go
 ```
 
-List LFG
+### List LFG
 ```
 ?lfg list
 ```
-Clear LFG
+### Clear LFG
 ```
 ?lfg clear
 ```
-Invite from LFG
+### Invite from LFG
 Click [Invite], then type:
 
 ```
@@ -160,11 +203,16 @@ Click [Invite], then type:
 ```
 On accept, the player auto-ports to the leader.
 
-Notify (Tell)
+### Cancel pending invite (invitee-side):
+```
+?lfg cancel
+```
+
+### Notify (Tell)
 Click [Tell] to send a cross-zone message.
 
-LFM Commands
-Post LFM
+## LFM Commands
+### Post LFM
 ```
 ?lfm [label] <min>-<max> need:<roles> <note>
 ```
@@ -174,29 +222,29 @@ Examples:
 ?lfm 30-40 need:healer,tank dungeon run
 ?lfm main 50-60 need:healer=1,tank=1,dps=2 raid prep
 ```
-List LFM
+### List LFM
 ```
 ?lfm list
 ```
-Clear LFM
+### Clear LFM
 ```
 ?lfm clear
 ?lfm clear main
 ?lfm clear all
 ```
-Notify (Tell)
+### Notify (Tell)
 Click [Tell] to notify the group leader.
 
-Consent Control
-Players can opt out of auto-porting:
+### Consent Control
+#### Players can opt out of auto-porting:
 
 ```
 ?lfg consent off
 ?lfg consent on
 ```
-Consent defaults to ON when posting LFG.
+Consent defaults to **ON** when posting **LFG**.
 
-Configuration
+## Configuration
 Inside lfg.pl:
 
 ```perl
@@ -208,7 +256,7 @@ $INVITE_COOLDOWN_SECONDS  # Invite cooldown
 $ALLOW_CROSS_ZONE_PORT    # Enable/disable cross-zone auto-port
 %ZONE_BLACKLIST           # Zones that block auto-port
 ```
-Design Notes
+## Design Notes
 All state stored in data buckets
 
 No database schema changes required
