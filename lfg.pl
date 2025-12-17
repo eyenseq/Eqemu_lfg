@@ -63,6 +63,34 @@ sub _key_hasmail    { my ($name) = @_; return "LFGHASMAIL:" . lc($name // ""); }
 # ------------------- Basic helpers -------------------
 sub _now { return time(); }
 
+sub _invitee_cancel_pending {
+    my ($client) = @_;
+    return if !$client;
+
+    my $me = _client_name($client);
+    if (!$me || $me eq '') {
+        _sysmsg($client, "Can't determine your name.");
+        return;
+    }
+
+    my $pend_key = _key_pend_name($me);
+    my $raw = _get_bucket($pend_key);
+
+    if (!defined $raw || $raw eq '') {
+        _sysmsg($client, "You have no pending invite to cancel.");
+        return;
+    }
+
+    my $snap = _safe_decode($raw);
+    my $leader = "Unknown";
+    if ($snap && ref($snap) eq 'HASH') {
+        $leader = $snap->{leader_name} // "Unknown";
+    }
+
+    _del_bucket($pend_key);
+    _sysmsg($client, "Canceled pending invite from $leader.");
+}
+
 sub _set_bucket {
     my ($key, $val, $ttl) = @_;
     $ttl //= $TTL_SECONDS;
@@ -560,7 +588,13 @@ sub lfg_handle_say {
         }
 
         if ($rest =~ /^\s*list\s*$/i)  { _list_ads($client, 'LFG'); return 1; }
-        if ($rest =~ /^\s*clear\s*$/i) { _del_bucket(_key_lfg($cid)); _idx_remove_value(_key_lfg_index(), $cid); _say($client, "LFG cleared."); return 1; }
+        
+		if ($rest =~ /^\s*clear\s*$/i) { _del_bucket(_key_lfg($cid)); _idx_remove_value(_key_lfg_index(), $cid); _say($client, "LFG cleared."); return 1; }
+		
+		if ($rest =~ /^\s*cancel\s*$/i) {
+			_invitee_cancel_pending($client);
+			return 1;
+		}
 
         if ($rest =~ /^\s*invite\s+(\S+)\s*$/i) {
             _invite_and_mark_pending($client, $1);
@@ -767,6 +801,36 @@ sub lfg_try_pending_port {
 
     my $g = $client->GetGroup();
     return if !$g;
+	
+    # HARD LOCK (cross-zone safe):
+    # Only auto-port if current group leader name matches snapshot leader_name.
+    # But don't delete pending just because we can't resolve leader entity cross-zone.
+
+    my $leader_name_now = "";
+
+    # Prefer a pure-name API if the server has it
+    eval { $leader_name_now = $g->GetLeaderName(); 1; };
+
+    # Fallback to entity leader (only works same-zone on many builds)
+    if (!$leader_name_now || $leader_name_now eq "") {
+        my $leader = $g->GetLeader();
+        $leader_name_now = eval { $leader->GetName() } || "" if $leader;
+    }
+
+    my $leader_name_snap = lc($snap->{leader_name} // "");
+
+    # If we still can't resolve leader name (likely cross-zone), just retry later
+    if (!$leader_name_now || $leader_name_now eq "") {
+        return; # keep pending; don't delete
+    }
+
+    if (lc($leader_name_now) ne $leader_name_snap) {
+        _say($client, "Auto-port canceled: pending invite was for '$snap->{leader_name}', "
+                    . "but your current group leader is '$leader_name_now'.");
+        _del_bucket($pend_key);
+        return;
+    }
+
 
     my $zone_id = $snap->{zone_id};
     return if !$zone_id;
@@ -933,6 +997,15 @@ sub _invite_and_mark_pending {
     );
 
     _set_bucket($pend_key, encode_json(\%snap), $PEND_TTL_SECONDS);
+	
+	# Notify invitee: invite incoming (cross-zone inbox)
+	my $leader_name = _client_name($leader_client);
+	my $note = "Invite incoming from $leader_name. Watch for a /invite popup. "
+			 . "If you accept, you'll auto-port to them. "
+			 . "If you don't want this, type ?lfg cancel.";
+
+	_inbox_push_name($target_name, $leader_name, $note);
+
 
     # UX: show best-fit info to leader + requested invite helper
     my $cmd = "/invite $target_name";
