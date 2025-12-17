@@ -112,24 +112,19 @@ sub EVENT_ENTERZONE {
     plugin::lfg_try_pending_port($client);
 }
 
-sub EVENT_ZONE {
-    plugin::lfg_try_pending_port($client);
-}
-
 sub EVENT_GROUP_CHANGE {
     plugin::lfg_try_pending_port($client);
 }
 
 sub EVENT_TIMER {
-    if ($timer eq "lfg_inbox") {
-        plugin::lfg_deliver_inbox($client)
-            if plugin::lfg_has_mail($client);
+	if ($timer eq "lfg_inbox") {
+        # Only do work if flagged
+        if (plugin::lfg_has_mail($client)) {
+            plugin::lfg_deliver_inbox($client);
+        }
     }
 }
 
-sub EVENT_SAY {
-    plugin::lfg_handle_say($client, $text);
-}
 ```
 
 ⚠️ If these events already exist, merge the logic rather than overwriting.
